@@ -1,0 +1,18 @@
+# Build output
+build/
+rain
+
+# Object files
+*.o
+*.a
+*.so
+*.dylib
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Editor
+.vscode/
+*.swp
+*~

@@ -235,9 +235,195 @@ static bool invokeFromClass(ObjClass *klass, ObjString *name, int argCount)
     return call(AS_CLOSURE(method), argCount);
 }
 
+static int compareValues(const void *a, const void *b)
+{
+    Value va = *(Value *)a;
+    Value vb = *(Value *)b;
+
+    if (IS_NUMBER(va) && IS_NUMBER(vb))
+    {
+        double da = AS_NUMBER(va);
+        double db = AS_NUMBER(vb);
+        if (da < db)
+            return -1;
+        if (da > db)
+            return 1;
+        return 0;
+    }
+
+    if (IS_STRING(va) && IS_STRING(vb))
+    {
+        return strcmp(AS_CSTRING(va), AS_CSTRING(vb));
+    }
+
+    return 0;
+}
+
+static bool invokeArray(ObjArray *array, ObjString *name, int argCount)
+{
+
+    if (strcmp(name->chars, "len") == 0)
+    {
+        if (argCount != 0)
+        {
+            runtimeError("len() takes no arguments");
+            return false;
+        }
+        vm.stackTop -= argCount + 1;
+        push(NUMBER_VAL(array->count));
+        return true;
+    }
+
+    if (strcmp(name->chars, "push") == 0)
+    {
+        if (argCount != 1)
+        {
+            runtimeError("push() takes exactly 1 argument.");
+            return false;
+        }
+        Value value = peek(0);
+        if (array->count == array->capacity)
+        {
+            int oldCapacity = array->capacity;
+            array->capacity = GROW_CAPACITY(oldCapacity);
+            array->values = GROW_ARRAY(Value, array->values, oldCapacity, array->capacity);
+        }
+        array->values[array->count++] = value;
+        vm.stackTop -= argCount + 1;
+        push(OBJ_VAL(array));
+        return true;
+    }
+
+    if (strcmp(name->chars, "pop") == 0)
+    {
+        if (argCount != 0)
+        {
+            runtimeError("pop() takes no arguments.");
+            return false;
+        }
+        if (array->count == 0)
+        {
+            runtimeError("Cannot pop from empty array.");
+            return false;
+        }
+        Value popped = array->values[--array->count];
+        vm.stackTop -= argCount + 1;
+        push(popped);
+        return true;
+    }
+
+    if (strcmp(name->chars, "contains") == 0)
+    {
+        if (argCount != 1)
+        {
+            runtimeError("contains() takes exactly one argument.");
+            return false;
+        }
+        Value target = peek(0);
+        bool found = false;
+        for (int i = 0; i < array->count; i++)
+        {
+            if (valuesEqual(array->values[i], target))
+            {
+                found = true;
+                break;
+            }
+        }
+        vm.stackTop -= argCount + 1;
+        push(BOOL_VAL(found));
+        return true;
+    }
+
+    if (strcmp(name->chars, "reverse") == 0)
+    {
+        if (argCount != 0)
+        {
+            runtimeError("reverse() takes no arguments.");
+            return false;
+        }
+        int left = 0;
+        int right = array->count - 1;
+        while (left < right)
+        {
+            Value temp = array->values[left];
+            array->values[left] = array->values[right];
+            array->values[right] = temp;
+            left++;
+            right--;
+        }
+        vm.stackTop -= argCount + 1;
+        push(OBJ_VAL(array));
+        return true;
+    }
+
+    if (strcmp(name->chars, "sort") == 0)
+    {
+        if (argCount != 0)
+        {
+            runtimeError("sort() takes no arguments.");
+            return false;
+        }
+        qsort(array->values, array->count, sizeof(Value), compareValues);
+        vm.stackTop -= argCount + 1;
+        push(OBJ_VAL(array));
+        return true;
+    }
+
+    if (name->length == 5 && memcmp(name->chars, "slice", 5) == 0)
+    {
+        if (argCount != 2)
+        {
+            runtimeError("slice() takes exactly 2 arguments.");
+            return false;
+        }
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1)))
+        {
+            runtimeError("slice() arguments must be numbers.");
+            return false;
+        }
+
+        int end = (int)AS_NUMBER(peek(0));
+        int start = (int)AS_NUMBER(peek(1));
+
+        if (start < 0 || end > array->count || start > end)
+        {
+            runtimeError("slice() index out of bounds.");
+            return false;
+        }
+
+        ObjArray *result = newArray();
+        push(OBJ_VAL(result)); // GC safety
+
+        int length = end - start;
+        result->capacity = length;
+        result->count = length;
+        result->values = ALLOCATE(Value, length);
+
+        for (int i = 0; i < length; i++)
+        {
+            result->values[i] = array->values[start + i];
+        }
+
+        pop(); // pop GC guard
+        vm.stackTop -= argCount + 1;
+        push(OBJ_VAL(result));
+        return true;
+    }
+
+    runtimeError("unknown array method '%s'.", name->chars);
+    return false;
+}
+
 static bool invoke(ObjString *name, int argCount)
 {
     Value receiver = peek(argCount);
+
+    if (IS_ARRAY(receiver))
+    {
+        ObjArray *array = AS_ARRAY(receiver);
+        return invokeArray(array, name, argCount);
+    }
+
     if (!IS_INSTANCE(receiver))
     {
         runtimeError("only instances have methods.");

@@ -180,11 +180,16 @@ void printObject(Value value)
         printf("#[");
         for (int i = 0; i < array->count; i++)
         {
-            printValue(array->values[i]);
-            if (i < array->count - 1)
+            if (IS_STRING(array->values[i]))
             {
-                printf(", ");
+                printf("\"%s\"", AS_CSTRING(array->values[i]));
             }
+            else
+            {
+                printValue(array->values[i]);
+            }
+            if (i < array->count - 1)
+                printf(", ");
         }
         printf("]");
         break;

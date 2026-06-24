@@ -8,6 +8,7 @@
 
 typedef enum
 {
+    OBJ_ARRAY,
     OBJ_BOUND_METHOD,
     OBJ_CLASS,
     OBJ_CLOSURE,
@@ -24,6 +25,14 @@ struct Obj
     bool isMarked;
     Obj *next;
 };
+
+typedef struct
+{
+    Obj obj;
+    int count;
+    int capacity;
+    Value *values;
+} ObjArray;
 
 typedef struct
 {
@@ -91,6 +100,7 @@ typedef struct
 #define ALLOCATE_OBJ(type, objectType) \
     (type *)allocateObject(sizeof(type), objectType) // allocate specific heap object type
 
+ObjArray *newArray();
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 ObjClass *newClass(ObjString *name);
 ObjClosure *newClosure(ObjFunction *function);
@@ -118,6 +128,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 #define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
+#define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
 
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
@@ -125,6 +136,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod *)AS_OBJ(value))
 #define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
+#define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
 #define AS_NATIVE(value) \
     (((ObjNative *)AS_OBJ(value))->function)
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)

@@ -92,6 +92,9 @@ static void unary(bool canAssign);
 static void number(bool canAssign);
 static void string(bool canAssign);
 static void grouping(bool canAssign);
+static void array(bool canAssign);
+static void arrayIndex(bool canAssign);
+static void arrow(bool canAssign);
 static void expression(void);
 static void statement();
 static void declaration();
@@ -1072,6 +1075,57 @@ static void unary(bool canAssign)
     }
 }
 
+static void array(bool canAssign)
+{
+    int elementCount = 0;
+    if (!check(TOKEN_RIGHT_BRACKET))
+    {
+        do
+        {
+            expression();
+            if (elementCount == 255)
+            {
+                error("Can't have more than 255 elements in array literal.");
+            }
+            elementCount++;
+
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after array elements.");
+    emitBytes(OP_ARRAY_BUILD, (uint8_t)elementCount);
+}
+
+static void arrayIndex(bool canAssign)
+{
+    expression();
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after index.");
+    if (canAssign && match(TOKEN_EQUAL))
+    {
+        expression();
+        emitByte(OP_INDEX_SET);
+    }
+    else
+    {
+        emitByte(OP_INDEX_GET);
+    }
+}
+
+static void arrow(bool canAssign)
+{
+    consume(TOKEN_IDENTIFIER, "expect method name after '->'.");
+    uint8_t name = identifierConstant(&parser.previous);
+    if (match(TOKEN_LEFT_PAREN))
+    {
+        uint8_t argCount = argumentList();
+        emitBytes(OP_INVOKE, name);
+        emitByte(argCount);
+    }
+    else
+    {
+        emitBytes(OP_GET_PROPERTY, name);
+    }
+}
+
 static void literal(bool canAssign)
 {
     switch (parser.previous.type)
@@ -1110,6 +1164,10 @@ ParseRule rules[] = {
     [TOKEN_GREATER_EQUAL] = {NULL, binary, PREC_COMPARISION},
     [TOKEN_LESS] = {NULL, binary, PREC_COMPARISION},
     [TOKEN_LESS_EQUAL] = {NULL, binary, PREC_COMPARISION},
+    [TOKEN_LEFT_BRACKET] = {NULL, NULL, PREC_NONE},
+    [TOKEN_RIGHT_BRACKET] = {NULL, NULL, PREC_NONE},
+    [TOKEN_HASH_LEFT_BRACKET] = {array, arrayIndex, PREC_CALL},
+    [TOKEN_ARROW] = {NULL, arrow, PREC_CALL},
     [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
     [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},

@@ -28,7 +28,16 @@ ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method)
     ObjBoundMethod *bound = ALLOCATE_OBJ(ObjBoundMethod, OBJ_BOUND_METHOD);
     bound->receiver = receiver;
     bound->method = method;
-    return method;
+    return bound;
+}
+
+ObjArray *newArray()
+{
+    ObjArray *array = ALLOCATE_OBJ(ObjArray, OBJ_ARRAY);
+    array->count = 0;
+    array->capacity = 0;
+    array->values = NULL;
+    return array;
 }
 
 ObjClass *newClass(ObjString *name)
@@ -163,6 +172,26 @@ void printObject(Value value)
     case OBJ_CLASS:
     {
         printf("%s", AS_CLASS(value)->name->chars);
+        break;
+    }
+    case OBJ_ARRAY:
+    {
+        ObjArray *array = AS_ARRAY(value);
+        printf("#[");
+        for (int i = 0; i < array->count; i++)
+        {
+            if (IS_STRING(array->values[i]))
+            {
+                printf("\"%s\"", AS_CSTRING(array->values[i]));
+            }
+            else
+            {
+                printValue(array->values[i]);
+            }
+            if (i < array->count - 1)
+                printf(", ");
+        }
+        printf("]");
         break;
     }
     case OBJ_BOUND_METHOD:

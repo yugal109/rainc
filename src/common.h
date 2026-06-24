@@ -5,7 +5,7 @@
 #include <stddef.h>  // NULL,size_t -null pointer constant and memory size type
 #include <stdint.h>  // unit8_t ,uint16_t,uint32_t - fixed width integers, no platform surprises
 
-#define NAN_BOXING
+// #define NAN_BOXING
 // #define DEBUG_PRINT_CODE
 // #define DEBUG_TRACE_EXECUTION
 

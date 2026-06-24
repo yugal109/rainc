@@ -1,30 +1,21 @@
-class Animal {
-    init(name) {
-        this.name = name;
-    }
-    speak() {
-        print this.name + " makes a sound.";
-    }
-}
-
-class Dog < Animal {
-    init(name) {
-        super.init(name);
-    }
-    speak() {
-        print this.name + " barks.";
+// stress test GC with arrays
+fun makeArrays() {
+    var i = 0;
+    while (i < 100) {
+        var arr = #[1, 2, 3, 4, 5];
+        i = i + 1;
     }
 }
 
-class GuideDog < Dog {
-    speak() {
-        super.speak();
-        print this.name + " is also a guide dog.";
-    }
-}
+makeArrays();
+print "GC survived";
 
-var d = Dog("Rex");
-d.speak();
+// arrays with object values (strings go on heap, good GC test)
+var strs = #["hello", "world", "rain", "language"];
+print strs#[0];
+print strs#[3];
 
-var g = GuideDog("Buddy");
-g.speak();
+// modify after many allocations
+var nums = #[10, 20, 30];
+nums#[1] = 999;
+print nums;

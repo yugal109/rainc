@@ -161,6 +161,12 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return constantInstruction("OP_CLASS", chunk, offset);
     case OP_CLOSE_UPVALUE:
         return simpleInstruction("OP_CLOSE_UPVALUE", offset);
+    case OP_ARRAY_BUILD:
+        return byteInstruction("OP_ARRAY_BUILD", chunk, offset);
+    case OP_INDEX_GET:
+        return simpleInstruction("OP_INDEX_GET", offset);
+    case OP_INDEX_SET:
+        return simpleInstruction("OP_INDEX_SET", offset);
     default:
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;

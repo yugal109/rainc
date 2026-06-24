@@ -79,6 +79,15 @@ static void blackenObject(Obj *object)
 #endif
     switch (object->type)
     {
+    case OBJ_ARRAY:
+    {
+        ObjArray *array = (ObjArray *)object;
+        for (int i = 0; i < array->count; i++)
+        {
+            markValue(array->values[i]);
+        }
+        break;
+    }
     case OBJ_BOUND_METHOD:
     {
         ObjBoundMethod *bound = (ObjBoundMethod *)object;
@@ -89,7 +98,6 @@ static void blackenObject(Obj *object)
     case OBJ_CLASS:
     {
         ObjClass *klass = (ObjClass *)object;
-        freeTable(&klass->methods);
         markObject((Obj *)klass->name);
         markTable(&klass->methods);
         break;
@@ -135,6 +143,13 @@ static void freeObject(Obj *object)
 
     switch (object->type)
     {
+    case OBJ_ARRAY:
+    {
+        ObjArray *array = (ObjArray *)object;
+        FREE_ARRAY(Value, array->values, array->capacity);
+        FREE(ObjArray, object);
+        break;
+    }
     case OBJ_BOUND_METHOD:
         FREE(ObjBoundMethod, object);
         break;

@@ -626,6 +626,73 @@ static InterpretResult run()
             frame = &vm.frames[vm.frameCount - 1];
             break;
         }
+        case OP_ARRAY_BUILD:
+        {
+            int count = READ_BYTE();
+            ObjArray *array = newArray();
+            push(OBJ_VAL(array));
+
+            array->capacity = count;
+            array->values = ALLOCATE(Value, count);
+            array->count = count;
+
+            for (int i = 0; i < count; i++)
+            {
+                array->values[i] = peek(count - i);
+            }
+
+            vm.stackTop -= count + 1;
+            push(OBJ_VAL(array));
+            break;
+        }
+        case OP_INDEX_GET:
+        {
+            if (!IS_NUMBER(peek(0)))
+            {
+                runtimeError("Array index must be a number.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            int index = (int)AS_NUMBER(pop());
+
+            if (!IS_ARRAY(peek(0)))
+            {
+                runtimeError("Only arrays can be indexed.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            ObjArray *array = AS_ARRAY(pop());
+            if (index < 0 || index >= array->count)
+            {
+                runtimeError("Array index out of bounds.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            push(array->values[index]);
+            break;
+        }
+        case OP_INDEX_SET:
+        {
+            if (!IS_NUMBER(peek(1)))
+            {
+                runtimeError("Array index must be a number.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            Value value = pop();
+            int index = (int)AS_NUMBER(pop());
+
+            if (!IS_ARRAY(peek(0)))
+            {
+                runtimeError("Only arrays can be indexed.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            ObjArray *array = AS_ARRAY(pop());
+            if (index < 0 || index >= array->count)
+            {
+                runtimeError("Array index out of bound");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            array->values[index] = value;
+            push(value);
+            break;
+        }
         }
     }
 

@@ -241,6 +241,16 @@ Token scanToken()
 
     switch (c)
     {
+    case '[':
+        return makeToken(TOKEN_LEFT_BRACKET);
+    case ']':
+        return makeToken(TOKEN_RIGHT_BRACKET);
+    case '#':
+        if (match('['))
+        {
+            return makeToken(TOKEN_HASH_LEFT_BRACKET);
+        }
+        return errorToken("Unexpected character after '#'.");
     case '(':
         return makeToken(TOKEN_LEFT_PAREN);
     case ')':
@@ -256,6 +266,8 @@ Token scanToken()
     case '.':
         return makeToken(TOKEN_DOT);
     case '-':
+        if (match('>'))
+            return makeToken(TOKEN_ARROW);
         return makeToken(TOKEN_MINUS);
     case '+':
         return makeToken(TOKEN_PLUS);

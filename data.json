@@ -1,0 +1,11 @@
+{
+  "name": "rain",
+  "version": 1,
+  "cool": true,
+  "author": "yugal",
+  "tags": ["language", "bytecode", "vm"],
+  "config": {
+    "debug": false,
+    "maxStack": 256
+  }
+}

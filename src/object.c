@@ -88,6 +88,14 @@ ObjNative *newNative(NativeFn function)
     return native;
 }
 
+ObjModule *newModule(ObjString *name)
+{
+    ObjModule *module = ALLOCATE_OBJ(ObjModule, OBJ_MODULE);
+    module->name = name;
+    initTable(&module->fields);
+    return module;
+}
+
 static uint32_t hashString(const char *key, int length)
 {
     uint32_t hash = 2166136261u;
@@ -208,6 +216,11 @@ void printObject(Value value)
     case OBJ_INSTANCE:
     {
         printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
+    }
+    case OBJ_MODULE:
+    {
+        printf("<module %s>", AS_MODULE(value)->name->chars);
+        break;
     }
     case OBJ_NATIVE:
     {

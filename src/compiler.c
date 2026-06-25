@@ -116,6 +116,8 @@ static ParseRule *getRule(TokenType);
 static ObjFunction *endCompiler(void);
 static void emitReturn(void);
 static void namedVariable(Token, bool);
+static void moduleAccess(bool canAssign);
+static void importStatement(void);
 
 Parser parser; // single global instance
 
@@ -828,7 +830,11 @@ static void synchronize()
 
 static void declaration()
 {
-    if (match(TOKEN_CLASS))
+    if (match(TOKEN_BENUTZEN))
+    {
+        importStatement();
+    }
+    else if (match(TOKEN_CLASS))
     {
         classDeclaration();
     }
@@ -963,9 +969,57 @@ static void number(bool canAssign)
 
 static void string(bool canAssign)
 {
-    emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, parser.previous.length - 2)));
-}
+    const char *src = parser.previous.start + 1;
+    int len = parser.previous.length - 2;
 
+    char *buffer = (char *)malloc(len + 1);
+    int outLen = 0;
+
+    for (int i = 0; i < len; i++)
+    {
+        if (src[i] == '\\' && i + 1 < len)
+        {
+            i++;
+            switch (src[i])
+            {
+            case 'n':
+                buffer[outLen++] = '\n';
+                break;
+            case 't':
+                buffer[outLen++] = '\t';
+                break;
+            case 'r':
+                buffer[outLen++] = '\r';
+                break;
+            case '\\':
+                buffer[outLen++] = '\\';
+                break;
+            case '"':
+                buffer[outLen++] = '"';
+                break;
+            case '0':
+                buffer[outLen++] = '\0';
+                break;
+            default:
+                buffer[outLen++] = '\\';
+                buffer[outLen++] = src[i];
+                break;
+            }
+        }
+        else
+        {
+            buffer[outLen++] = src[i];
+        }
+    }
+
+    ObjString *str = copyString(buffer, outLen);
+    free(buffer);
+
+    // push onto Rain stack for GC safety before emitConstant
+    push(OBJ_VAL(str));
+    emitConstant(OBJ_VAL(str));
+    pop();
+}
 static void namedVariable(Token name, bool canAssign)
 {
     uint8_t getOp, setOp;
@@ -1126,6 +1180,71 @@ static void arrow(bool canAssign)
     }
 }
 
+static void moduleAccess(bool canAssign)
+{
+    consume(TOKEN_IDENTIFIER, "Expect field name after '::'.");
+    uint8_t name = identifierConstant(&parser.previous);
+
+    if (match(TOKEN_LEFT_PAREN))
+    {
+        emitBytes(OP_GET_MODULE, name);
+        uint8_t argCount = argumentList();
+        emitBytes(OP_CALL, argCount);
+    }
+    else
+    {
+        emitBytes(OP_GET_MODULE, name);
+    }
+}
+
+static void importStatement()
+{
+    consume(TOKEN_STRING, "Expect module name after 'benutzen'.");
+
+    // full path string e.g. "math" or "utils.rn"
+    int fullLength = parser.previous.length - 2;
+    const char *fullName = parser.previous.start + 1;
+
+    // compute stem name - strip .rn if present
+    int stemLength = fullLength;
+    if (fullLength > 3 &&
+        fullName[fullLength - 3] == '.' &&
+        fullName[fullLength - 2] == 'r' &&
+        fullName[fullLength - 1] == 'n')
+    {
+        stemLength = fullLength - 3;
+    }
+
+    // also strip directory prefix for stem
+    int stemStart = 0;
+    for (int i = stemLength - 1; i >= 0; i--)
+    {
+        if (fullName[i] == '/')
+        {
+            stemStart = i + 1;
+            break;
+        }
+    }
+
+    // push __import__ function onto stack
+    Token importToken = syntheticToken("__import__");
+    namedVariable(importToken, false);
+
+    // push full path as argument
+    emitConstant(OBJ_VAL(copyString(fullName, fullLength)));
+
+    emitBytes(OP_CALL, 1);
+
+    // define global variable with stem name
+    // "math" → var math = ...
+    // "utils.rn" → var utils = ...
+    // "models/nn.rn" → var nn = ...
+    uint8_t global = makeConstant(OBJ_VAL(copyString(fullName + stemStart, stemLength - stemStart)));
+    emitBytes(OP_DEFINE_GLOBAL, global);
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after module name.");
+}
+
 static void literal(bool canAssign)
 {
     switch (parser.previous.type)
@@ -1168,6 +1287,8 @@ ParseRule rules[] = {
     [TOKEN_RIGHT_BRACKET] = {NULL, NULL, PREC_NONE},
     [TOKEN_HASH_LEFT_BRACKET] = {array, arrayIndex, PREC_CALL},
     [TOKEN_ARROW] = {NULL, arrow, PREC_CALL},
+    [TOKEN_COLON_COLON] = {NULL, moduleAccess, PREC_CALL},
+    [TOKEN_BENUTZEN] = {NULL, NULL, PREC_NONE},
     [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
     [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},

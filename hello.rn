@@ -1,0 +1,7 @@
+benutzen "io";
+benutzen "json";
+
+var content = io::readFile("data.json");
+var obj = json::parse(content);
+print json::keys(obj);
+print json::stringify(obj);

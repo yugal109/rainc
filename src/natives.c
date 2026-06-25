@@ -139,7 +139,7 @@ static Value importNative(int argCount, Value *args)
 
         Table snapshot;
         initTable(&snapshot);
-        for (int i = 0; i < vm.globals.capacity; i++)
+        for (int i = 0; i <= vm.globals.capacity; i++)
         {
             Entry *entry = &vm.globals.entries[i];
             if (entry->key == NULL)
@@ -160,7 +160,7 @@ static Value importNative(int argCount, Value *args)
             return NIL_VAL;
         }
 
-        for (int i = 0; i < vm.globals.capacity; i++)
+        for (int i = 0; i <= vm.globals.capacity; i++)
         {
             Entry *entry = &vm.globals.entries[i];
             if (entry->key == NULL)
@@ -192,7 +192,9 @@ static Value importNative(int argCount, Value *args)
         NativeFn loaderFn = AS_NATIVE(loader);
         Value module = loaderFn(0, NULL);
 
+        push(module);
         tableSet(&vm.importedModules, path, module);
+        pop();
         return module;
     }
 }

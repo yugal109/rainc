@@ -321,16 +321,11 @@ static void stringifyValue(Value val, char *buf, int *pos, int maxLen)
     else if (IS_INSTANCE(val))
     {
         ObjInstance *instance = AS_INSTANCE(val);
-        printf("DEBUG stringify instance capacity=%d count=%d\n",
-               instance->fields.capacity, instance->fields.count);
         appendStr(buf, pos, maxLen, "{", 1);
         bool first = true;
-        for (int i = 0; i < instance->fields.capacity; i++)
+        for (int i = 0; i <= instance->fields.capacity; i++)
         {
             Entry *entry = &instance->fields.entries[i];
-            printf("DEBUG entry[%d] key=%s val_type=%d\n", i,
-                   entry->key ? entry->key->chars : "NULL",
-                   entry->value.type);
 
             if (entry->key == NULL)
                 continue;
@@ -383,7 +378,7 @@ static Value jsonKeys(int argCount, Value *args)
     ObjInstance *instance = AS_INSTANCE(args[0]);
     ObjArray *result = newArray();
     push(OBJ_VAL(result));
-    for (int i = 0; i < instance->fields.capacity; i++)
+    for (int i = 0; i <= instance->fields.capacity; i++)
     {
         Entry *entry = &instance->fields.entries[i];
         if (entry->key == NULL)

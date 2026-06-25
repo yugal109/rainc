@@ -94,6 +94,22 @@ static Value ioInputNumber(int argCount, Value *args)
     double value = strtod(buffer, NULL);
     return NUMBER_VAL(value);
 }
+static Value ioFileExists(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_STRING(args[0])) return NIL_VAL;
+    const char *path = AS_CSTRING(args[0]);
+    FILE *file = fopen(path, "r");
+    if (file == NULL) return BOOL_VAL(false);
+    fclose(file);
+    return BOOL_VAL(true);
+}
+
+static Value ioDeleteFile(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_STRING(args[0])) return NIL_VAL;
+    const char *path = AS_CSTRING(args[0]);
+    return BOOL_VAL(remove(path) == 0);
+}
 
 ObjModule *initIoModule(void)
 {
@@ -104,6 +120,8 @@ ObjModule *initIoModule(void)
 
     setNative(module, "readFile", ioReadFile);
     setNative(module, "writeFile", ioWriteFile);
+    setNative(module, "fileExists", ioFileExists);
+    setNative(module, "deleteFile", ioDeleteFile);
     setNative(module, "input", ioInput);
     setNative(module, "inputNumber", ioInputNumber);
 

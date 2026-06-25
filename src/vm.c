@@ -9,13 +9,10 @@
 #include "memory.h"
 #include "vm.h" // VM struct, InterpretResult, function declarations
 #include "compiler.h"
+#include "natives.h"
+#include "modules.h"
 
 VM vm; // single global VM instance
-
-static Value clockNative(int argCount, Value *args)
-{
-    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
 
 static void resetStack()
 {
@@ -53,15 +50,6 @@ static void runtimeError(const char *format, ...)
     resetStack();
 }
 
-static void defineNative(const char *name, NativeFn function)
-{
-    push(OBJ_VAL(copyString(name, (int)strlen(name))));
-    push(OBJ_VAL(newNative(function)));
-    tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
-    pop();
-    pop();
-}
-
 void initVM()
 {
     resetStack(); // initialize stack to empty
@@ -76,16 +64,22 @@ void initVM()
 
     initTable(&vm.globals);
     initTable(&vm.strings);
+    initTable(&vm.preload);
+    initTable(&vm.importedModules);
+    initTable(&vm.loadingModules);
 
     vm.initString = NULL;
     vm.initString = copyString("init", 4);
-    defineNative("clock", clockNative);
+    registerNatives();
 }
 
 void freeVM()
 {
     freeTable(&vm.globals);
     freeTable(&vm.strings);
+    freeTable(&vm.preload);
+    freeTable(&vm.importedModules);
+    freeTable(&vm.loadingModules);
     vm.initString = NULL;
     freeObjects();
 }
@@ -107,7 +101,7 @@ static Value peek(int distance)
     return vm.stackTop[-1 - distance];
 }
 
-static bool call(ObjClosure *closure, int argCount)
+bool callFunction(ObjClosure *closure, int argCount)
 {
     if (argCount != closure->function->arity)
     {
@@ -187,7 +181,7 @@ static bool callValue(Value callee, int argCount)
         {
             ObjBoundMethod *bound = AS_BOUND_METHOD(callee);
             vm.stackTop[-argCount - 1] = bound->receiver;
-            return call(bound->method, argCount);
+            return callFunction(bound->method, argCount);
         }
         case OBJ_CLASS:
         {
@@ -196,7 +190,7 @@ static bool callValue(Value callee, int argCount)
             Value initializer;
             if (tableGet(&klass->methods, vm.initString, &initializer))
             {
-                return call(AS_CLOSURE(initializer), argCount);
+                return callFunction(AS_CLOSURE(initializer), argCount);
             }
             else if (argCount != 0)
             {
@@ -206,7 +200,7 @@ static bool callValue(Value callee, int argCount)
             return true;
         }
         case OBJ_CLOSURE:
-            return call(AS_CLOSURE(callee), argCount);
+            return callFunction(AS_CLOSURE(callee), argCount);
         case OBJ_NATIVE:
         {
             NativeFn native = AS_NATIVE(callee);
@@ -220,7 +214,7 @@ static bool callValue(Value callee, int argCount)
             break;
         }
     }
-    runtimeError("can only call functions and classes.");
+    runtimeError("can only callFunction functions and classes.");
     return false;
 }
 
@@ -232,7 +226,7 @@ static bool invokeFromClass(ObjClass *klass, ObjString *name, int argCount)
         runtimeError("undefined property '%s'.", name->chars);
         return false;
     }
-    return call(AS_CLOSURE(method), argCount);
+    return callFunction(AS_CLOSURE(method), argCount);
 }
 
 static int compareValues(const void *a, const void *b)
@@ -479,7 +473,7 @@ static void concatenate()
     push(OBJ_VAL(result));
 }
 
-static InterpretResult run()
+InterpretResult run(int frameBase)
 {
     CallFrame *frame = &vm.frames[vm.frameCount - 1];
 // macros for the run loop
@@ -800,7 +794,7 @@ static InterpretResult run()
             Value result = pop();
             closeUpvalues(frame->slots);
             vm.frameCount--;
-            if (vm.frameCount == 0)
+            if (vm.frameCount == frameBase)
             {
                 // removing the initial script itself
                 pop();
@@ -879,6 +873,28 @@ static InterpretResult run()
             push(value);
             break;
         }
+        case OP_GET_MODULE:
+        {
+            ObjString *field = READ_STRING();
+            Value moduleVal = peek(0);
+
+            if (!IS_MODULE(moduleVal))
+            {
+                runtimeError("'::' can only be used on modules.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
+
+            ObjModule *module = AS_MODULE(moduleVal);
+            Value value;
+            if (!tableGet(&module->fields, field, &value))
+            {
+                runtimeError("Module '%s' has no field '%s'.", module->name->chars, field->chars);
+                return INTERPRET_RUNTIME_ERROR;
+            };
+            pop();
+            push(value);
+            break;
+        }
         }
     }
 
@@ -901,7 +917,7 @@ InterpretResult interpret(const char *source)
     pop();
     push(OBJ_VAL(closure));
     // callValue(OBJ_VAL(closure), 0);
-    call(closure, 0);
+    callFunction(closure, 0);
 
-    return run();
+    return run(0);
 }

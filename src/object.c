@@ -42,14 +42,17 @@ ObjArray *newArray()
 
 ObjClass *newClass(ObjString *name)
 {
+    push(OBJ_VAL(name));
     ObjClass *klass = ALLOCATE_OBJ(ObjClass, OBJ_CLASS);
     klass->name = name;
     initTable(&klass->methods);
+    pop();
     return klass;
 }
 
 ObjClosure *newClosure(ObjFunction *function)
 {
+    push(OBJ_VAL(function));
     ObjUpvalue **upvalues = ALLOCATE(ObjUpvalue *, function->upvalueCount);
     for (int i = 0; i < function->upvalueCount; i++)
     {
@@ -60,6 +63,7 @@ ObjClosure *newClosure(ObjFunction *function)
     closure->function = function;
     closure->upvalues = upvalues;
     closure->upvalueCount = function->upvalueCount;
+    pop();
     return closure;
 }
 
@@ -75,9 +79,11 @@ ObjFunction *newFunction()
 
 ObjInstance *newInstance(ObjClass *klass)
 {
+    push(OBJ_VAL(klass));
     ObjInstance *instance = ALLOCATE_OBJ(ObjInstance, OBJ_INSTANCE);
     instance->klass = klass;
     initTable(&instance->fields);
+    pop();
     return instance;
 }
 
@@ -86,6 +92,16 @@ ObjNative *newNative(NativeFn function)
     ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
     native->function = function;
     return native;
+}
+
+ObjModule *newModule(ObjString *name)
+{
+    push(OBJ_VAL(name));
+    ObjModule *module = ALLOCATE_OBJ(ObjModule, OBJ_MODULE);
+    module->name = name;
+    initTable(&module->fields);
+    pop();
+    return module;
 }
 
 static uint32_t hashString(const char *key, int length)
@@ -208,6 +224,11 @@ void printObject(Value value)
     case OBJ_INSTANCE:
     {
         printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
+    }
+    case OBJ_MODULE:
+    {
+        printf("<module %s>", AS_MODULE(value)->name->chars);
+        break;
     }
     case OBJ_NATIVE:
     {

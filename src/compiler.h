@@ -5,6 +5,6 @@
 #include "vm.h"
 
 ObjFunction *compile(const char *source); // compile source string to bytecode
-void markCompilerRoots();
+void markCompilerRoots(void);
 
 #endif

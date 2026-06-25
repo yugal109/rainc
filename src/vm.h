@@ -25,26 +25,31 @@ typedef enum
 
 typedef struct
 {
-    CallFrame frames[FRAMES_MAX]; // call stack
-    int frameCount;               // number of active frames
+    CallFrame frames[FRAMES_MAX];
+    int frameCount;
+    Value stack[STACK_MAX];
 
-    Value stack[STACK_MAX]; // the value stack - fixed size array lives inside VM struct
     Value *stackTop;
-
     Table strings;
     ObjString *initString;
+
     Table globals;
+    Table preload; // built-in module loaders
+    Table importedModules;
+    Table loadingModules;
+
     ObjUpvalue *openUpvalues;
 
     size_t bytesAllocated;
     size_t nextGC;
 
     Obj *objects;
+
     int grayCount;
     int grayCapacity;
+
     Obj **grayStack;
 } VM;
-
 extern VM vm;
 
 void initVM();                                 // initialize the VM
@@ -52,5 +57,7 @@ void freeVM();                                 // free the VM
 InterpretResult interpret(const char *source); // takes in source string, not chunk
 void push(Value value);                        // push a value onto the stack
 Value pop();                                   // pop the top value off the stack
+InterpretResult run(int frameBase);
+bool callFunction(ObjClosure *closure, int argCount);
 
 #endif

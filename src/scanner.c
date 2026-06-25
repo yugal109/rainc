@@ -81,13 +81,18 @@ static Token string()
     {
         if (peek() == '\n')
             scanner.line++;
+        if (peek() == '\\' && peekNext() == '"')
+        {
+            advance(); // skip backslash
+            advance(); // skip quote
+            continue;
+        }
         advance();
     }
 
     if (isAtEnd())
         return errorToken("Unterminated string.");
 
-    // the closing quote
     advance();
     return makeToken(TOKEN_STRING);
 }
@@ -135,6 +140,8 @@ static TokenType identifierType()
     { // check first character
     case 'a':
         return checkKeyword(1, 2, "nd", TOKEN_AND);
+    case 'b':
+        return checkKeyword(1, 7, "enutzen", TOKEN_BENUTZEN);
     case 'c':
         return checkKeyword(1, 4, "lass", TOKEN_CLASS);
     case 'e':
@@ -265,6 +272,15 @@ Token scanToken()
         return makeToken(TOKEN_COMMA);
     case '.':
         return makeToken(TOKEN_DOT);
+    case ':':
+    {
+        if (match(':'))
+        {
+            return makeToken(TOKEN_COLON_COLON);
+        }
+        return errorToken("Unexpected character ':'.");
+    }
+
     case '-':
         if (match('>'))
             return makeToken(TOKEN_ARROW);

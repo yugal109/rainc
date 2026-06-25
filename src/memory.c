@@ -88,6 +88,13 @@ static void blackenObject(Obj *object)
         }
         break;
     }
+    case OBJ_MODULE:
+    {
+        ObjModule *module = (ObjModule *)object;
+        markObject((Obj *)module->name);
+        markTable(&module->fields);
+        break;
+    }
     case OBJ_BOUND_METHOD:
     {
         ObjBoundMethod *bound = (ObjBoundMethod *)object;
@@ -148,6 +155,13 @@ static void freeObject(Obj *object)
         ObjArray *array = (ObjArray *)object;
         FREE_ARRAY(Value, array->values, array->capacity);
         FREE(ObjArray, object);
+        break;
+    }
+    case OBJ_MODULE:
+    {
+        ObjModule *module = (ObjModule *)object;
+        freeTable(&module->fields);
+        FREE(ObjModule, object);
         break;
     }
     case OBJ_BOUND_METHOD:
@@ -217,8 +231,10 @@ static void markRoots()
     {
         markObject((Obj *)upvalue);
     }
-
     markTable(&vm.globals);
+    markTable(&vm.preload);
+    markTable(&vm.importedModules);
+    markTable(&vm.loadingModules);
     markCompilerRoots();
     markObject((Obj *)vm.initString);
 }
@@ -241,6 +257,7 @@ static void sweep()
     {
         if (object->isMarked)
         {
+            object->isMarked = false;
             previous = object;
             object = object->next;
         }

@@ -14,6 +14,7 @@ typedef enum
     OBJ_CLOSURE,
     OBJ_FUNCTION,
     OBJ_INSTANCE,
+    OBJ_MODULE,
     OBJ_NATIVE,
     OBJ_UPVALUE,
     OBJ_STRING // heap allocated string object
@@ -25,6 +26,13 @@ struct Obj
     bool isMarked;
     Obj *next;
 };
+
+typedef struct
+{
+    Obj obj;
+    ObjString *name;
+    Table fields;
+} ObjModule;
 
 typedef struct
 {
@@ -100,6 +108,7 @@ typedef struct
 #define ALLOCATE_OBJ(type, objectType) \
     (type *)allocateObject(sizeof(type), objectType) // allocate specific heap object type
 
+ObjModule *newModule(ObjString *name);
 ObjArray *newArray();
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 ObjClass *newClass(ObjString *name);
@@ -129,6 +138,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 #define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
+#define IS_MODULE(value) isObjType(value, OBJ_MODULE)
 
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
@@ -137,6 +147,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
+#define AS_MODULE(value) ((ObjModule *)AS_OBJ(value))
 #define AS_NATIVE(value) \
     (((ObjNative *)AS_OBJ(value))->function)
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)

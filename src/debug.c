@@ -167,6 +167,10 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return simpleInstruction("OP_INDEX_GET", offset);
     case OP_INDEX_SET:
         return simpleInstruction("OP_INDEX_SET", offset);
+
+    case OP_GET_MODULE:
+        return constantInstruction("OP_GET_MODULE", chunk, offset);
+
     default:
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;

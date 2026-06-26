@@ -796,9 +796,13 @@ InterpretResult run(int frameBase)
             vm.frameCount--;
             if (vm.frameCount == frameBase)
             {
-                // removing the initial script itself
-                pop();
-
+                if (frameBase == 0)
+                {
+                    pop(); // script closure
+                    return INTERPRET_OK;
+                }
+                vm.stackTop = frame->slots;
+                push(result);
                 return INTERPRET_OK;
             }
             vm.stackTop = frame->slots;

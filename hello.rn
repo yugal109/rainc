@@ -1,16 +1,17 @@
-benutzen "http";
-benutzen "json";
+benutzen "time";
 
-// GET
-var res = http::get("https://jsonplaceholder.typicode.com/todos/1");
-print res.status;
-var todo = json::parse(res.body);
-print todo.title;
+print time::now();
+print time::date();
+print time::clock();
+print time::datetime();
+print time::year();
+print time::month();
+print time::day();
+print time::hour();
+print time::minute();
+print time::second();
+print time::weekday();
+print time::monthName();
 
-// POST
-var payload = json::stringify(json::parse("{\"title\": \"rain todo\", \"completed\": false, \"userId\": 1}"));
-var res2 = http::post("https://jsonplaceholder.typicode.com/todos", payload);
-print res2.status;
-var created = json::parse(res2.body);
-print created.title;
-print created.id;
+var ts = time::now();
+print time::format(ts, "%Y/%m/%d %H:%M:%S");

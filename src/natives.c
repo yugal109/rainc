@@ -14,6 +14,7 @@
 #include "os_module.h"
 #include "json_module.h"
 #include "http_module.h"
+#include "time_module.h"
 #include "compiler.h"
 
 void defineNative(const char *name, NativeFn function)
@@ -243,6 +244,13 @@ static Value httpLoaderNative(int argCount, Value *args)
     return OBJ_VAL(initHttpModule());
 }
 
+static Value timeLoaderNative(int argCount, Value *args)
+{
+    (void)argCount;
+    (void)args;
+    return OBJ_VAL(initTimeModule());
+}
+
 void registerNatives(void)
 {
     defineNative("clock", clockNative);
@@ -254,4 +262,5 @@ void registerNatives(void)
     registerModuleLoader("os", osLoaderNative);
     registerModuleLoader("json", jsonLoaderNative);
     registerModuleLoader("http", httpLoaderNative);
+    registerModuleLoader("time", timeLoaderNative);
 }

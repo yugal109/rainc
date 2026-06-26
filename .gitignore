@@ -22,3 +22,4 @@ rain
 *.rn
 *.db
 data.json
+weights/

@@ -16,3 +16,8 @@ rain
 .vscode/
 *.swp
 *~
+
+# Local / runtime files
+*.db
+hello.rn
+data.json

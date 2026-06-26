@@ -20,6 +20,28 @@ typedef struct
     size_t size;
 } CurlBuffer;
 
+static bool corsEnabled = false;
+static char corsOrigin[256] = "*";
+
+static Value httpCors(int argCount, Value *args)
+{
+    if (argCount < 1 || !IS_BOOL(args[0]))
+        return NIL_VAL;
+
+    corsEnabled = AS_BOOL(args[0]);
+
+    if (argCount == 2 && IS_STRING(args[1]))
+    {
+        strncpy(corsOrigin, AS_CSTRING(args[1]), sizeof(corsOrigin) - 1);
+    }
+    else
+    {
+        strncpy(corsOrigin, "*", sizeof(corsOrigin) - 1);
+    }
+
+    return NIL_VAL;
+}
+
 static size_t curlWriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t realSize = size * nmemb;
@@ -198,13 +220,29 @@ static void sendResponse(int clientFd, Value resVal)
 
     // build and send HTTP response
     char header[1024];
-    snprintf(header, sizeof(header),
-             "HTTP/1.1 %d %s\r\n"
-             "Content-Type: %s\r\n"
-             "Content-Length: %zu\r\n"
-             "Connection: close\r\n"
-             "\r\n",
-             status, statusText, contentType, strlen(body));
+    if (corsEnabled)
+    {
+        snprintf(header, sizeof(header),
+                 "HTTP/1.1 %d %s\r\n"
+                 "Content-Type: %s\r\n"
+                 "Content-Length: %zu\r\n"
+                 "Access-Control-Allow-Origin: %s\r\n"
+                 "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
+                 "Access-Control-Allow-Headers: Content-Type\r\n"
+                 "Connection: close\r\n"
+                 "\r\n",
+                 status, statusText, contentType, strlen(body), corsOrigin);
+    }
+    else
+    {
+        snprintf(header, sizeof(header),
+                 "HTTP/1.1 %d %s\r\n"
+                 "Content-Type: %s\r\n"
+                 "Content-Length: %zu\r\n"
+                 "Connection: close\r\n"
+                 "\r\n",
+                 status, statusText, contentType, strlen(body));
+    }
 
     send(clientFd, header, strlen(header), 0);
     send(clientFd, body, strlen(body), 0);
@@ -265,6 +303,31 @@ static Value httpServe(int argCount, Value *args)
 
         ObjInstance *req = parseRequest(buf, (int)bytes);
         push(OBJ_VAL(req));
+
+        if (corsEnabled)
+        {
+            Value methodVal;
+            ObjString *methodKey = copyString("method", 6);
+            if (tableGet(&req->fields, methodKey, &methodVal) && IS_STRING(methodVal))
+            {
+                if (strcmp(AS_CSTRING(methodVal), "OPTIONS") == 0)
+                {
+                    char preflight[512];
+                    snprintf(preflight, sizeof(preflight),
+                             "HTTP/1.1 204 No Content\r\n"
+                             "Access-Control-Allow-Origin: %s\r\n"
+                             "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
+                             "Access-Control-Allow-Headers: Content-Type\r\n"
+                             "Connection: close\r\n"
+                             "\r\n",
+                             corsOrigin);
+                    send(clientFd, preflight, strlen(preflight), 0);
+                    pop(); // req
+                    close(clientFd);
+                    continue;
+                }
+            }
+        }
 
         Value res = callHandler(handler, req);
         sendResponse(clientFd, res);
@@ -551,6 +614,7 @@ initHttpModule(void)
     setNative(module, "serveFile", httpServeFile);
     setNative(module, "get", httpGet);
     setNative(module, "post", httpPost);
+    setNative(module, "cors", httpCors);
 
     pop(); // module
     pop(); // name

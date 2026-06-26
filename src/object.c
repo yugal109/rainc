@@ -224,6 +224,7 @@ void printObject(Value value)
     case OBJ_INSTANCE:
     {
         printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
+        break;
     }
     case OBJ_MODULE:
     {

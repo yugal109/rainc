@@ -15,6 +15,7 @@
 #include "json_module.h"
 #include "http_module.h"
 #include "time_module.h"
+#include "db_module.h"
 #include "compiler.h"
 
 void defineNative(const char *name, NativeFn function)
@@ -251,6 +252,13 @@ static Value timeLoaderNative(int argCount, Value *args)
     return OBJ_VAL(initTimeModule());
 }
 
+static Value dbLoaderNative(int argCount, Value *args)
+{
+    (void)argCount;
+    (void)args;
+    return OBJ_VAL(initDbModule());
+}
+
 void registerNatives(void)
 {
     defineNative("clock", clockNative);
@@ -263,4 +271,5 @@ void registerNatives(void)
     registerModuleLoader("json", jsonLoaderNative);
     registerModuleLoader("http", httpLoaderNative);
     registerModuleLoader("time", timeLoaderNative);
+    registerModuleLoader("db", dbLoaderNative);
 }

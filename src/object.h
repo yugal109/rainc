@@ -14,6 +14,7 @@ typedef enum
     OBJ_CLOSURE,
     OBJ_FUNCTION,
     OBJ_INSTANCE,
+    OBJ_MATRIX,
     OBJ_MODULE,
     OBJ_NATIVE,
     OBJ_UPVALUE,
@@ -26,6 +27,14 @@ struct Obj
     bool isMarked;
     Obj *next;
 };
+
+typedef struct
+{
+    Obj obj;
+    int rows;
+    int cols;
+    double *data;
+} ObjMatrix;
 
 typedef struct
 {
@@ -108,6 +117,7 @@ typedef struct
 #define ALLOCATE_OBJ(type, objectType) \
     (type *)allocateObject(sizeof(type), objectType) // allocate specific heap object type
 
+ObjMatrix *newMatrix(int rows, int cols);
 ObjModule *newModule(ObjString *name);
 ObjArray *newArray();
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
@@ -139,6 +149,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 #define IS_ARRAY(value) isObjType(value, OBJ_ARRAY)
 #define IS_MODULE(value) isObjType(value, OBJ_MODULE)
+#define IS_MATRIX(value) isObjType(value, OBJ_MATRIX)
 
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
@@ -148,6 +159,7 @@ static inline bool isObjType(Value value, ObjType type)
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_ARRAY(value) ((ObjArray *)AS_OBJ(value))
 #define AS_MODULE(value) ((ObjModule *)AS_OBJ(value))
+#define AS_MATRIX(value) ((ObjMatrix *)AS_OBJ(value))
 #define AS_NATIVE(value) \
     (((ObjNative *)AS_OBJ(value))->function)
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)

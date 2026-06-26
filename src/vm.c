@@ -812,7 +812,7 @@ InterpretResult run(int frameBase)
         }
         case OP_ARRAY_BUILD:
         {
-            int count = READ_BYTE();
+            int count = READ_SHORT();
             ObjArray *array = newArray();
             push(OBJ_VAL(array));
 

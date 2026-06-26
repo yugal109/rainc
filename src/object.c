@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "memory.h"
 #include "object.h"
@@ -29,6 +30,16 @@ ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method)
     bound->receiver = receiver;
     bound->method = method;
     return bound;
+}
+
+ObjMatrix *newMatrix(int rows, int cols)
+{
+    ObjMatrix *matrix = ALLOCATE_OBJ(ObjMatrix, OBJ_MATRIX);
+    matrix->rows = rows;
+    matrix->cols = cols;
+    matrix->data = (double *)malloc(rows * cols * sizeof(double));
+    memset(matrix->data, 0, rows * cols * sizeof(double));
+    return matrix;
 }
 
 ObjArray *newArray()
@@ -188,6 +199,12 @@ void printObject(Value value)
     case OBJ_CLASS:
     {
         printf("%s", AS_CLASS(value)->name->chars);
+        break;
+    }
+    case OBJ_MATRIX:
+    {
+        ObjMatrix *m = AS_MATRIX(value);
+        printf("<matrix %dx%d>", m->rows, m->cols);
         break;
     }
     case OBJ_ARRAY:

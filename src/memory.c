@@ -88,6 +88,9 @@ static void blackenObject(Obj *object)
         }
         break;
     }
+    case OBJ_MATRIX:
+        // no references — data is plain double* not GC managed
+        break;
     case OBJ_MODULE:
     {
         ObjModule *module = (ObjModule *)object;
@@ -155,6 +158,13 @@ static void freeObject(Obj *object)
         ObjArray *array = (ObjArray *)object;
         FREE_ARRAY(Value, array->values, array->capacity);
         FREE(ObjArray, object);
+        break;
+    }
+    case OBJ_MATRIX:
+    {
+        ObjMatrix *matrix = (ObjMatrix *)object;
+        free(matrix->data);
+        FREE(ObjMatrix, object);
         break;
     }
     case OBJ_MODULE:

@@ -161,7 +161,11 @@ int disassembleInstruction(Chunk *chunk, int offset)
     case OP_CLOSE_UPVALUE:
         return simpleInstruction("OP_CLOSE_UPVALUE", offset);
     case OP_ARRAY_BUILD:
-        return byteInstruction("OP_ARRAY_BUILD", chunk, offset);
+    {
+        uint16_t count = (uint16_t)((chunk->code[offset + 1] << 8) | chunk->code[offset + 2]);
+        printf("%-16s %4d\n", "OP_ARRAY_BUILD", count);
+        return offset + 3;
+    }
     case OP_INDEX_GET:
         return simpleInstruction("OP_INDEX_GET", offset);
     case OP_INDEX_SET:

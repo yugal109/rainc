@@ -16,6 +16,7 @@
 #include "http_module.h"
 #include "time_module.h"
 #include "db_module.h"
+#include "csv_module.h"
 #include "compiler.h"
 
 void defineNative(const char *name, NativeFn function)
@@ -259,6 +260,13 @@ static Value dbLoaderNative(int argCount, Value *args)
     return OBJ_VAL(initDbModule());
 }
 
+static Value csvLoaderNative(int argCount, Value *args)
+{
+    (void)argCount;
+    (void)args;
+    return OBJ_VAL(initCsvModule());
+}
+
 void registerNatives(void)
 {
     defineNative("clock", clockNative);
@@ -272,4 +280,5 @@ void registerNatives(void)
     registerModuleLoader("http", httpLoaderNative);
     registerModuleLoader("time", timeLoaderNative);
     registerModuleLoader("db", dbLoaderNative);
+    registerModuleLoader("csv", csvLoaderNative);
 }

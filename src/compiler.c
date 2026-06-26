@@ -1169,16 +1169,17 @@ static void array(bool canAssign)
         do
         {
             expression();
-            if (elementCount == 255)
+            if (elementCount == 65535)
             {
-                error("Can't have more than 255 elements in array literal.");
+                error("Can't have more than 65535 elements in array literal.");
             }
             elementCount++;
 
         } while (match(TOKEN_COMMA));
     }
     consume(TOKEN_RIGHT_BRACKET, "Expect ']' after array elements.");
-    emitBytes(OP_ARRAY_BUILD, (uint8_t)elementCount);
+    emitByte(OP_ARRAY_BUILD);
+    emitIndex((uint16_t)elementCount);
 }
 
 static void arrayIndex(bool canAssign)

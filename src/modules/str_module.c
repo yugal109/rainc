@@ -417,6 +417,13 @@ static Value strFormat(int argCount, Value *args)
     return OBJ_VAL(copyString(buffer, outLen));
 }
 
+static Value strToNumber(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
+    return NUMBER_VAL(strtod(AS_CSTRING(args[0]), NULL));
+}
+
 ObjModule *initStrModule(void)
 {
     ObjString *name = copyString("str", 3);
@@ -442,6 +449,7 @@ ObjModule *initStrModule(void)
     setNative(module, "split", strSplit);
     setNative(module, "join", strJoin);
     setNative(module, "format", strFormat);
+    setNative(module, "toNumber", strToNumber);
 
     pop(); // module
     pop(); // name

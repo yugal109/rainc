@@ -18,6 +18,7 @@ rain
 *~
 
 # Local / runtime files
+*.csv
+*.rn
 *.db
-hello.rn
 data.json

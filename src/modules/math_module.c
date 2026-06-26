@@ -8,6 +8,7 @@
 #include "../value.h"
 #include "../vm.h"
 #include "../table.h"
+#include <Accelerate/Accelerate.h>
 
 static void setNative(ObjModule *module, const char *name, NativeFn function)
 {
@@ -18,6 +19,16 @@ static void setNative(ObjModule *module, const char *name, NativeFn function)
     tableSet(&module->fields, key, OBJ_VAL(native));
     pop();
     pop();
+}
+
+static inline double mget(ObjMatrix *m, int i, int j)
+{
+    return m->data[i * m->cols + j];
+}
+
+static inline void mset(ObjMatrix *m, int i, int j, double val)
+{
+    m->data[i * m->cols + j] = val;
 }
 
 static void setNumber(ObjModule *module, const char *name, double value)
@@ -521,6 +532,595 @@ static Value mathMedian(int argCount, Value *args)
     FREE_ARRAY(Value, temp, a->count);
     return NUMBER_VAL(median);
 }
+
+static Value mathMatmul(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_MATRIX(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *B = AS_MATRIX(args[1]);
+
+    if (A->cols != B->rows)
+        return NIL_VAL;
+
+    int m = A->rows;
+    int n = A->cols;
+    int p = B->cols;
+
+    ObjMatrix *C = newMatrix(m, p);
+    push(OBJ_VAL(C));
+
+    // C = A · B using BLAS
+    cblas_dgemm(CblasRowMajor,
+                CblasNoTrans,
+                CblasNoTrans,
+                m, p, n,
+                1.0,
+                A->data, n,
+                B->data, p,
+                0.0,
+                C->data, p);
+
+    pop();
+    return OBJ_VAL(C);
+}
+static Value mathTranspose(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *T = newMatrix(A->cols, A->rows);
+    push(OBJ_VAL(T));
+
+    for (int i = 0; i < A->rows; i++)
+        for (int j = 0; j < A->cols; j++)
+            mset(T, j, i, mget(A, i, j));
+
+    pop();
+    return OBJ_VAL(T);
+}
+
+static Value mathZeros(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_NUMBER(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    int rows = (int)AS_NUMBER(args[0]);
+    int cols = (int)AS_NUMBER(args[1]);
+
+    ObjMatrix *m = newMatrix(rows, cols); // already zeroed
+    push(OBJ_VAL(m));
+    pop();
+    return OBJ_VAL(m);
+}
+
+static Value mathOnes(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_NUMBER(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    int rows = (int)AS_NUMBER(args[0]);
+    int cols = (int)AS_NUMBER(args[1]);
+
+    ObjMatrix *m = newMatrix(rows, cols);
+    push(OBJ_VAL(m));
+    for (int i = 0; i < rows * cols; i++)
+        m->data[i] = 1.0;
+    pop();
+    return OBJ_VAL(m);
+}
+
+static Value mathShape(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *m = AS_MATRIX(args[0]);
+
+    ObjArray *shape = newArray();
+    push(OBJ_VAL(shape));
+    shape->capacity = 2;
+    shape->values = ALLOCATE(Value, 2);
+    shape->count = 2;
+    shape->values[0] = NUMBER_VAL(m->rows);
+    shape->values[1] = NUMBER_VAL(m->cols);
+    pop();
+    return OBJ_VAL(shape);
+}
+
+static Value mathSigmoid(int argCount, Value *args)
+{
+    if (argCount != 1)
+        return NIL_VAL;
+
+    if (IS_NUMBER(args[0]))
+    {
+        double x = AS_NUMBER(args[0]);
+        return NUMBER_VAL(1.0 / (1.0 + exp(-x)));
+    }
+
+    if (IS_MATRIX(args[0]))
+    {
+        ObjMatrix *A = AS_MATRIX(args[0]);
+        ObjMatrix *C = newMatrix(A->rows, A->cols);
+        push(OBJ_VAL(C));
+        for (int i = 0; i < A->rows * A->cols; i++)
+            C->data[i] = 1.0 / (1.0 + exp(-A->data[i]));
+        pop();
+        return OBJ_VAL(C);
+    }
+
+    return NIL_VAL;
+}
+
+static Value mathRelu(int argCount, Value *args)
+{
+    if (argCount != 1)
+        return NIL_VAL;
+
+    if (IS_NUMBER(args[0]))
+    {
+        double x = AS_NUMBER(args[0]);
+        return NUMBER_VAL(x > 0 ? x : 0.0);
+    }
+
+    if (IS_MATRIX(args[0]))
+    {
+        ObjMatrix *A = AS_MATRIX(args[0]);
+        ObjMatrix *C = newMatrix(A->rows, A->cols);
+        push(OBJ_VAL(C));
+        for (int i = 0; i < A->rows * A->cols; i++)
+            C->data[i] = A->data[i] > 0 ? A->data[i] : 0.0;
+        pop();
+        return OBJ_VAL(C);
+    }
+
+    return NIL_VAL;
+}
+
+static Value mathSoftmax(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_ARRAY(args[0]))
+        return NIL_VAL;
+
+    ObjArray *arr = AS_ARRAY(args[0]);
+    int n = arr->count;
+
+    // find max for numerical stability
+    double maxVal = AS_NUMBER(arr->values[0]);
+    for (int i = 1; i < n; i++)
+    {
+        double x = AS_NUMBER(arr->values[i]);
+        if (x > maxVal)
+            maxVal = x;
+    }
+
+    // compute exp(x - max) and sum
+    double sum = 0.0;
+    double *exps = (double *)malloc(n * sizeof(double));
+    for (int i = 0; i < n; i++)
+    {
+        exps[i] = exp(AS_NUMBER(arr->values[i]) - maxVal);
+        sum += exps[i];
+    }
+
+    // normalize
+    ObjArray *result = newArray();
+    push(OBJ_VAL(result));
+
+    result->capacity = n;
+    result->values = ALLOCATE(Value, n);
+    result->count = n;
+
+    for (int i = 0; i < n; i++)
+        result->values[i] = NUMBER_VAL(exps[i] / sum);
+
+    free(exps);
+    pop();
+    return OBJ_VAL(result);
+}
+
+static Value mathRandomMatrix(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_NUMBER(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    int rows = (int)AS_NUMBER(args[0]);
+    int cols = (int)AS_NUMBER(args[1]);
+
+    ObjMatrix *m = newMatrix(rows, cols);
+    push(OBJ_VAL(m));
+
+    double scale = sqrt(2.0 / (rows + cols));
+    for (int i = 0; i < rows * cols; i++)
+        m->data[i] = (((double)rand() / RAND_MAX) * 2.0 - 1.0) * scale;
+
+    pop();
+    return OBJ_VAL(m);
+}
+
+static Value mathMAdd(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_MATRIX(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *B = AS_MATRIX(args[1]);
+
+    int rows = A->rows;
+    int cols = A->cols;
+
+    // B must match or be broadcastable
+    if (B->rows != rows && B->rows != 1)
+        return NIL_VAL;
+    if (B->cols != cols && B->cols != 1)
+        return NIL_VAL;
+
+    ObjMatrix *C = newMatrix(rows, cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++)
+        {
+            double a = mget(A, i, j);
+            double b = mget(B, B->rows == 1 ? 0 : i, B->cols == 1 ? 0 : j);
+            mset(C, i, j, a + b);
+        }
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMSub(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_MATRIX(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *B = AS_MATRIX(args[1]);
+
+    int rows = A->rows;
+    int cols = A->cols;
+
+    if (B->rows != rows && B->rows != 1)
+        return NIL_VAL;
+    if (B->cols != cols && B->cols != 1)
+        return NIL_VAL;
+
+    ObjMatrix *C = newMatrix(rows, cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++)
+        {
+            double a = mget(A, i, j);
+            double b = mget(B, B->rows == 1 ? 0 : i, B->cols == 1 ? 0 : j);
+            mset(C, i, j, a - b);
+        }
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMScale(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    double scalar = AS_NUMBER(args[1]);
+
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < A->rows * A->cols; i++)
+        C->data[i] = A->data[i] * scalar;
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMMul(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_MATRIX(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *B = AS_MATRIX(args[1]);
+
+    if (A->rows != B->rows || A->cols != B->cols)
+        return NIL_VAL;
+
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < A->rows * A->cols; i++)
+        C->data[i] = A->data[i] * B->data[i];
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMLog(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < A->rows * A->cols; i++)
+        C->data[i] = log(A->data[i] + 1e-8);
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMSum(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    int axis = (int)AS_NUMBER(args[1]);
+
+    if (axis == 1)
+    {
+        // sum each row → (rows, 1)
+        ObjMatrix *C = newMatrix(A->rows, 1);
+        push(OBJ_VAL(C));
+        for (int i = 0; i < A->rows; i++)
+        {
+            double sum = 0.0;
+            for (int j = 0; j < A->cols; j++)
+                sum += mget(A, i, j);
+            mset(C, i, 0, sum);
+        }
+        pop();
+        return OBJ_VAL(C);
+    }
+    else
+    {
+        // sum each col → (1, cols)
+        ObjMatrix *C = newMatrix(1, A->cols);
+        push(OBJ_VAL(C));
+        for (int j = 0; j < A->cols; j++)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < A->rows; i++)
+                sum += mget(A, i, j);
+            mset(C, 0, j, sum);
+        }
+        pop();
+        return OBJ_VAL(C);
+    }
+}
+
+static Value mathMSigmoidDeriv(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < A->rows * A->cols; i++)
+    {
+        double s = A->data[i];
+        C->data[i] = s * (1.0 - s);
+    }
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathMReluDeriv(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    for (int i = 0; i < A->rows * A->cols; i++)
+        C->data[i] = A->data[i] > 0 ? 1.0 : 0.0;
+
+    pop();
+    return OBJ_VAL(C);
+}
+
+static Value mathOneHot(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_ARRAY(args[0]) || !IS_NUMBER(args[1]))
+        return NIL_VAL;
+
+    ObjArray *labels = AS_ARRAY(args[0]);
+    int numClasses = (int)AS_NUMBER(args[1]);
+    int m = labels->count;
+
+    ObjMatrix *result = newMatrix(m, numClasses);
+    push(OBJ_VAL(result));
+
+    for (int i = 0; i < m; i++)
+    {
+        int label = (int)AS_NUMBER(labels->values[i]);
+        mset(result, i, label, 1.0);
+    }
+
+    pop();
+    return OBJ_VAL(result);
+}
+
+static Value mathArgmax(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+
+    // argmax per column → returns ObjArray of indices
+    ObjArray *result = newArray();
+    push(OBJ_VAL(result));
+    result->capacity = A->cols;
+    result->values = ALLOCATE(Value, A->cols);
+    result->count = A->cols;
+
+    for (int j = 0; j < A->cols; j++)
+    {
+        int maxIdx = 0;
+        double maxVal = mget(A, 0, j);
+        for (int i = 1; i < A->rows; i++)
+        {
+            double val = mget(A, i, j);
+            if (val > maxVal)
+            {
+                maxVal = val;
+                maxIdx = i;
+            }
+        }
+        result->values[j] = NUMBER_VAL(maxIdx);
+    }
+
+    pop();
+    return OBJ_VAL(result);
+}
+
+static Value mathFromArray(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_ARRAY(args[0]))
+        return NIL_VAL;
+
+    ObjArray *arr = AS_ARRAY(args[0]);
+    if (arr->count == 0)
+        return NIL_VAL;
+
+    // 2D array → ObjMatrix
+    if (IS_ARRAY(arr->values[0]))
+    {
+        int rows = arr->count;
+        int cols = AS_ARRAY(arr->values[0])->count;
+        ObjMatrix *m = newMatrix(rows, cols);
+        push(OBJ_VAL(m));
+
+        for (int i = 0; i < rows; i++)
+        {
+            ObjArray *row = AS_ARRAY(arr->values[i]);
+            for (int j = 0; j < cols; j++)
+                mset(m, i, j, AS_NUMBER(row->values[j]));
+        }
+
+        pop();
+        return OBJ_VAL(m);
+    }
+
+    // 1D array → (n, 1) matrix
+    int n = arr->count;
+    ObjMatrix *m = newMatrix(n, 1);
+    push(OBJ_VAL(m));
+    for (int i = 0; i < n; i++)
+        mset(m, i, 0, AS_NUMBER(arr->values[i]));
+    pop();
+    return OBJ_VAL(m);
+}
+
+static Value mathSaveMatrix(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_MATRIX(args[0]) || !IS_STRING(args[1]))
+        return NIL_VAL;
+
+    ObjMatrix *m = AS_MATRIX(args[0]);
+    const char *path = AS_CSTRING(args[1]);
+
+    FILE *f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        printf("Error: could not open '%s'\n", path);
+        return BOOL_VAL(false);
+    }
+
+    // write header
+    fwrite(&m->rows, sizeof(int), 1, f);
+    fwrite(&m->cols, sizeof(int), 1, f);
+
+    // write data
+    fwrite(m->data, sizeof(double), m->rows * m->cols, f);
+
+    fclose(f);
+    return BOOL_VAL(true);
+}
+
+static Value mathLoadMatrix(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
+
+    const char *path = AS_CSTRING(args[0]);
+
+    FILE *f = fopen(path, "rb");
+    if (f == NULL)
+    {
+        printf("Error: could not open '%s'\n", path);
+        return NIL_VAL;
+    }
+
+    int rows, cols;
+    fread(&rows, sizeof(int), 1, f);
+    fread(&cols, sizeof(int), 1, f);
+
+    ObjMatrix *m = newMatrix(rows, cols);
+    push(OBJ_VAL(m));
+
+    fread(m->data, sizeof(double), rows * cols, f);
+    fclose(f);
+
+    pop();
+    return OBJ_VAL(m);
+}
+
+static Value mathMSoftmax(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_MATRIX(args[0]))
+        return NIL_VAL;
+
+    ObjMatrix *A = AS_MATRIX(args[0]);
+    ObjMatrix *C = newMatrix(A->rows, A->cols);
+    push(OBJ_VAL(C));
+
+    // softmax per column
+    for (int j = 0; j < A->cols; j++)
+    {
+        // find max for numerical stability
+        double maxVal = mget(A, 0, j);
+        for (int i = 1; i < A->rows; i++)
+        {
+            double val = mget(A, i, j);
+            if (val > maxVal)
+                maxVal = val;
+        }
+
+        // compute exp and sum
+        double sum = 0.0;
+        for (int i = 0; i < A->rows; i++)
+        {
+            double e = exp(mget(A, i, j) - maxVal);
+            mset(C, i, j, e);
+            sum += e;
+        }
+
+        // normalize
+        for (int i = 0; i < A->rows; i++)
+            mset(C, i, j, mget(C, i, j) / sum);
+    }
+
+    pop();
+    return OBJ_VAL(C);
+}
+
 ObjModule *initMathModule(void)
 {
     ObjString *name = copyString("math", 4);
@@ -571,6 +1171,29 @@ ObjModule *initMathModule(void)
     setNative(module, "std", mathStd);
     setNative(module, "variance", mathVariance);
     setNative(module, "median", mathMedian);
+    setNative(module, "matmul", mathMatmul);
+    setNative(module, "transpose", mathTranspose);
+    setNative(module, "zeros", mathZeros);
+    setNative(module, "ones", mathOnes);
+    setNative(module, "shape", mathShape);
+    setNative(module, "sigmoid", mathSigmoid);
+    setNative(module, "relu", mathRelu);
+    setNative(module, "softmax", mathSoftmax);
+    setNative(module, "randomMatrix", mathRandomMatrix);
+    setNative(module, "madd", mathMAdd);
+    setNative(module, "msub", mathMSub);
+    setNative(module, "mscale", mathMScale);
+    setNative(module, "mmul", mathMMul);
+    setNative(module, "mlog", mathMLog);
+    setNative(module, "msum", mathMSum);
+    setNative(module, "msigmoidDeriv", mathMSigmoidDeriv);
+    setNative(module, "msoftmax", mathMSoftmax);
+    setNative(module, "mreluDeriv", mathMReluDeriv);
+    setNative(module, "oneHot", mathOneHot);
+    setNative(module, "argmax", mathArgmax);
+    setNative(module, "fromArray", mathFromArray);
+    setNative(module, "saveMatrix", mathSaveMatrix);
+    setNative(module, "loadMatrix", mathLoadMatrix);
 
     setNumber(module, "pi", 3.14159265358979323846);
     setNumber(module, "e", 2.71828182845904523536);

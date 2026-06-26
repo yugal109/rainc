@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -Wall -Wextra -pedantic -g -fsanitize=address -Isrc -Isrc/modules -I/opt/local/include
-LDFLAGS = -fsanitize=address -L/opt/local/lib -lcurl -lsqlite3
+LDFLAGS = -fsanitize=address -L/opt/local/lib -lcurl -lsqlite3 -framework Accelerate
 
 
 SRC_DIR = src

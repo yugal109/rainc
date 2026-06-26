@@ -13,6 +13,7 @@
 #include "str_module.h"
 #include "os_module.h"
 #include "json_module.h"
+#include "http_module.h"
 #include "compiler.h"
 
 void defineNative(const char *name, NativeFn function)
@@ -176,6 +177,7 @@ static Value importNative(int argCount, Value *args)
         tableSet(&vm.importedModules, moduleName, OBJ_VAL(module));
         tableDelete(&vm.loadingModules, moduleName);
 
+        pop(); // module init return value
         pop(); // module
         return OBJ_VAL(module);
     }
@@ -234,6 +236,13 @@ static Value jsonLoaderNative(int argCount, Value *args)
     return OBJ_VAL(initJsonModule());
 }
 
+static Value httpLoaderNative(int argCount, Value *args)
+{
+    (void)argCount;
+    (void)args;
+    return OBJ_VAL(initHttpModule());
+}
+
 void registerNatives(void)
 {
     defineNative("clock", clockNative);
@@ -244,4 +253,5 @@ void registerNatives(void)
     registerModuleLoader("str", strLoaderNative);
     registerModuleLoader("os", osLoaderNative);
     registerModuleLoader("json", jsonLoaderNative);
+    registerModuleLoader("http", httpLoaderNative);
 }

@@ -1,14 +1,10 @@
-benutzen "http";
+benutzen "str";
 
-fun handler(req) {
-    print req.method;
-    print req.path;
+var name = "rain";
+var version = 1;
+var cool = true;
 
-    if (req.path == "/") {
-        return http::serveFile(200, "index.html");
-    }
-
-    return http::response(404, "not found");
-}
-
-http::serve(8080, handler);
+print str::format("hello {0}!", name);
+print str::format("{0} version {1}", name, version);
+print str::format("is cool: {0}", cool);
+print str::format("{0} + {1} = {2}", 1, 2, 3);

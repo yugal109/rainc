@@ -342,6 +342,81 @@ static Value strJoin(int argCount, Value *args)
     return OBJ_VAL(result);
 }
 
+static Value strFormat(int argCount, Value *args)
+{
+    if (argCount < 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
+
+    ObjString *fmt = AS_STRING(args[0]);
+    const char *src = fmt->chars;
+    int srcLen = fmt->length;
+
+    char buffer[65536];
+    int outLen = 0;
+
+    int i = 0;
+    while (i < srcLen)
+    {
+        if (src[i] == '{' && i + 1 < srcLen)
+        {
+            // find closing }
+            int j = i + 1;
+            while (j < srcLen && src[j] != '}')
+                j++;
+
+            if (src[j] == '}')
+            {
+                // extract index number
+                char numBuf[16] = {0};
+                int numLen = j - i - 1;
+                if (numLen > 0 && numLen < 16)
+                {
+                    memcpy(numBuf, src + i + 1, numLen);
+                    int index = atoi(numBuf) + 1; // +1 because args[0] is format string
+
+                    if (index < argCount)
+                    {
+                        // convert arg to string
+                        Value arg = args[index];
+                        char tmp[256];
+                        int tmpLen = 0;
+
+                        if (IS_STRING(arg))
+                        {
+                            ObjString *s = AS_STRING(arg);
+                            memcpy(buffer + outLen, s->chars, s->length);
+                            outLen += s->length;
+                        }
+                        else if (IS_NUMBER(arg))
+                        {
+                            tmpLen = snprintf(tmp, sizeof(tmp), "%g", AS_NUMBER(arg));
+                            memcpy(buffer + outLen, tmp, tmpLen);
+                            outLen += tmpLen;
+                        }
+                        else if (IS_BOOL(arg))
+                        {
+                            const char *b = AS_BOOL(arg) ? "true" : "false";
+                            tmpLen = (int)strlen(b);
+                            memcpy(buffer + outLen, b, tmpLen);
+                            outLen += tmpLen;
+                        }
+                        else if (IS_NIL(arg))
+                        {
+                            memcpy(buffer + outLen, "nil", 3);
+                            outLen += 3;
+                        }
+                    }
+                    i = j + 1;
+                    continue;
+                }
+            }
+        }
+        buffer[outLen++] = src[i++];
+    }
+
+    return OBJ_VAL(copyString(buffer, outLen));
+}
+
 ObjModule *initStrModule(void)
 {
     ObjString *name = copyString("str", 3);
@@ -366,6 +441,7 @@ ObjModule *initStrModule(void)
     setNative(module, "reverse", strReverse);
     setNative(module, "split", strSplit);
     setNative(module, "join", strJoin);
+    setNative(module, "format", strFormat);
 
     pop(); // module
     pop(); // name

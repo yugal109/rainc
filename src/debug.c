@@ -28,36 +28,35 @@ static int jumpInstruction(const char *name, int sign, Chunk *chunk, int offset)
 
 static int constantInstruction(const char *name, Chunk *chunk, int offset)
 {
-    uint8_t constant = chunk->code[offset + 1];
+    uint16_t constant = (uint16_t)((chunk->code[offset + 1] << 8) | chunk->code[offset + 2]);
     printf("%-16s %4d '", name, constant);
-    printValue(chunk->constants.values[constant]);
-    printf("'\n");
-    return offset + 2;
-}
-
-static int invokeInstruction(const char *name, Chunk *chunk, int offset)
-{
-    uint8_t constant = chunk->code[offset + 1];
-    uint8_t argCount = chunk->code[offset + 2];
-    printf("%-16s (%d args) %4d '", name, argCount, constant);
     printValue(chunk->constants.values[constant]);
     printf("'\n");
     return offset + 3;
 }
 
+static int invokeInstruction(const char *name, Chunk *chunk, int offset)
+{
+    uint16_t constant = (uint16_t)((chunk->code[offset + 1] << 8) | chunk->code[offset + 2]);
+    uint8_t argCount = chunk->code[offset + 3];
+    printf("%-16s (%d args) %4d '", name, argCount, constant);
+    printValue(chunk->constants.values[constant]);
+    printf("'\n");
+    return offset + 4;
+}
+
 void disassembleChunk(Chunk *chunk, const char *name)
 {
-    printf("== %s ==\n", name); // print header
-
+    printf("== %s ==\n", name);
     for (int offset = 0; offset < chunk->count;)
     {
-        offset = disassembleInstruction(chunk, offset); // print one instruction , get next offset
+        offset = disassembleInstruction(chunk, offset);
     }
 }
 
 int disassembleInstruction(Chunk *chunk, int offset)
 {
-    printf("%04d ", offset); // print byte offset , padded to 4 digits
+    printf("%04d ", offset);
 
     if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
     {
@@ -136,11 +135,12 @@ int disassembleInstruction(Chunk *chunk, int offset)
     case OP_GET_SUPER:
         return constantInstruction("OP_GET_SUPER", chunk, offset);
     case OP_SUPER_INVOKE:
-        return constantInstruction("OP_SUPER_INVOKE", chunk, offset);
+        return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
     case OP_CLOSURE:
     {
         offset++;
-        uint8_t constant = chunk->code[offset++];
+        uint16_t constant = (uint16_t)((chunk->code[offset] << 8) | chunk->code[offset + 1]);
+        offset += 2;
         printf("%-16s %4d ", "OP_CLOSURE", constant);
         printValue(chunk->constants.values[constant]);
         printf("\n");
@@ -152,7 +152,6 @@ int disassembleInstruction(Chunk *chunk, int offset)
             int index = chunk->code[offset++];
             printf("%04d    |           %s %d\n", offset - 2, isLocal ? "local" : "upvalue", index);
         }
-
         return offset;
     }
     case OP_RETURN:
@@ -167,10 +166,8 @@ int disassembleInstruction(Chunk *chunk, int offset)
         return simpleInstruction("OP_INDEX_GET", offset);
     case OP_INDEX_SET:
         return simpleInstruction("OP_INDEX_SET", offset);
-
     case OP_GET_MODULE:
         return constantInstruction("OP_GET_MODULE", chunk, offset);
-
     default:
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;

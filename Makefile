@@ -1,5 +1,6 @@
 CC = clang
-CFLAGS = -Wall -Wextra -pedantic -g -fsanitize=address -Isrc -Isrc/modules
+CFLAGS = -Wall -Wextra -pedantic -g -fsanitize=address -Isrc -Isrc/modules -I/opt/local/include
+LDFLAGS = -fsanitize=address -L/opt/local/lib -lcurl
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -9,7 +10,7 @@ SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/modules/*.c)
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)

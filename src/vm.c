@@ -477,10 +477,10 @@ InterpretResult run(int frameBase)
 {
     CallFrame *frame = &vm.frames[vm.frameCount - 1];
 // macros for the run loop
-#define READ_BYTE() (*frame->ip++)                                                      // read current byte and advance ip
-#define READ_CONSTANT() (frame->closure->function->chunk.constants.values[READ_BYTE()]) // read next bye as constant index, look up value
+#define READ_BYTE() (*frame->ip++) // read current byte and advance ip
 #define READ_SHORT() \
     (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+#define READ_CONSTANT() (frame->closure->function->chunk.constants.values[READ_SHORT()]) // read next bye as constant index, look up value
 #define READ_STRING() AS_STRING(READ_CONSTANT())
 #define BINARY_OP(valueType, op)                        \
     do                                                  \

@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <curl/curl.h>
 
 #include "http_module.h"
 #include "object.h"
@@ -12,6 +13,28 @@
 #include "vm.h"
 #include "table.h"
 #include "memory.h"
+
+typedef struct
+{
+    char *data;
+    size_t size;
+} CurlBuffer;
+
+static size_t curlWriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    size_t realSize = size * nmemb;
+    CurlBuffer *buf = (CurlBuffer *)userp;
+
+    char *ptr = realloc(buf->data, buf->size + realSize + 1);
+    if (ptr == NULL)
+        return 0;
+
+    buf->data = ptr;
+    memcpy(buf->data + buf->size, contents, realSize);
+    buf->size += realSize;
+    buf->data[buf->size] = '\0';
+    return realSize;
+}
 
 static void setNative(ObjModule *module, const char *name, NativeFn function)
 {
@@ -399,6 +422,121 @@ static Value httpServeFile(int argCount, Value *args)
     return OBJ_VAL(res);
 }
 
+static Value httpGet(int argCount, Value *args)
+{
+    if (argCount != 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
+    const char *url = AS_CSTRING(args[0]);
+
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return NIL_VAL;
+
+    CurlBuffer buf;
+    buf.data = malloc(1);
+    buf.size = 0;
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    long statusCode = 200;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &statusCode);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+    {
+        free(buf.data);
+        return NIL_VAL;
+    }
+
+    // build response ObjInstance
+    ObjClass *klass = newClass(copyString("Object", 6));
+    push(OBJ_VAL(klass));
+    ObjInstance *response = newInstance(klass);
+    push(OBJ_VAL(response));
+
+    ObjString *statusKey = copyString("status", 6);
+    push(OBJ_VAL(statusKey));
+    tableSet(&response->fields, statusKey, NUMBER_VAL((double)statusCode));
+    pop();
+
+    ObjString *bodyKey = copyString("body", 4);
+    push(OBJ_VAL(bodyKey));
+    tableSet(&response->fields, bodyKey, OBJ_VAL(copyString(buf.data, (int)buf.size)));
+    pop();
+
+    free(buf.data);
+    pop(); // response
+    pop(); // klass
+    return OBJ_VAL(response);
+}
+
+static Value httpPost(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_STRING(args[0]) || !IS_STRING(args[1]))
+        return NIL_VAL;
+    const char *url = AS_CSTRING(args[0]);
+    const char *body = AS_CSTRING(args[1]);
+
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return NIL_VAL;
+
+    CurlBuffer buf;
+    buf.data = malloc(1);
+    buf.size = 0;
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    long statusCode = 200;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &statusCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+    {
+        free(buf.data);
+        return NIL_VAL;
+    }
+
+    ObjClass *klass = newClass(copyString("Object", 6));
+    push(OBJ_VAL(klass));
+    ObjInstance *response = newInstance(klass);
+    push(OBJ_VAL(response));
+
+    ObjString *statusKey = copyString("status", 6);
+    push(OBJ_VAL(statusKey));
+    tableSet(&response->fields, statusKey, NUMBER_VAL((double)statusCode));
+    pop();
+
+    ObjString *bodyKey = copyString("body", 4);
+    push(OBJ_VAL(bodyKey));
+    tableSet(&response->fields, bodyKey, OBJ_VAL(copyString(buf.data, (int)buf.size)));
+    pop();
+
+    free(buf.data);
+    pop(); // response
+    pop(); // klass
+    return OBJ_VAL(response);
+}
+
 ObjModule *
 initHttpModule(void)
 {
@@ -411,6 +549,8 @@ initHttpModule(void)
     setNative(module, "response", httpResponse);
     setNative(module, "jsonResponse", httpJsonResponse);
     setNative(module, "serveFile", httpServeFile);
+    setNative(module, "get", httpGet);
+    setNative(module, "post", httpPost);
 
     pop(); // module
     pop(); // name

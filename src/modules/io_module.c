@@ -96,19 +96,36 @@ static Value ioInputNumber(int argCount, Value *args)
 }
 static Value ioFileExists(int argCount, Value *args)
 {
-    if (argCount != 1 || !IS_STRING(args[0])) return NIL_VAL;
+    if (argCount != 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
     const char *path = AS_CSTRING(args[0]);
     FILE *file = fopen(path, "r");
-    if (file == NULL) return BOOL_VAL(false);
+    if (file == NULL)
+        return BOOL_VAL(false);
     fclose(file);
     return BOOL_VAL(true);
 }
 
 static Value ioDeleteFile(int argCount, Value *args)
 {
-    if (argCount != 1 || !IS_STRING(args[0])) return NIL_VAL;
+    if (argCount != 1 || !IS_STRING(args[0]))
+        return NIL_VAL;
     const char *path = AS_CSTRING(args[0]);
     return BOOL_VAL(remove(path) == 0);
+}
+
+static Value ioAppendFile(int argCount, Value *args)
+{
+    if (argCount != 2 || !IS_STRING(args[0]) || !IS_STRING(args[1]))
+        return NIL_VAL;
+    const char *path = AS_CSTRING(args[0]);
+    const char *content = AS_CSTRING(args[1]);
+    FILE *file = fopen(path, "a");
+    if (file == NULL)
+        return BOOL_VAL(false);
+    fputs(content, file);
+    fclose(file);
+    return BOOL_VAL(true);
 }
 
 ObjModule *initIoModule(void)
@@ -123,6 +140,7 @@ ObjModule *initIoModule(void)
     setNative(module, "fileExists", ioFileExists);
     setNative(module, "deleteFile", ioDeleteFile);
     setNative(module, "input", ioInput);
+    setNative(module, "appendFile", ioAppendFile);
     setNative(module, "inputNumber", ioInputNumber);
 
     pop(); // module
